@@ -6,6 +6,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <random>
 
 
 // C++ Std Usings
@@ -24,9 +25,14 @@ inline double degrees_to_radians(double degrees) {
     return degrees * pi / 180.0;
 }
 
+// Thread-safe random number generation using thread-local generators
 inline double random_double() {
     // Returns a random real in [0,1).
-    return std::rand() / (RAND_MAX + 1.0);
+    // Uses thread-local Mersenne Twister generator for thread safety
+    thread_local std::random_device rd;
+    thread_local std::mt19937 generator(rd());
+    thread_local std::uniform_real_distribution<double> distribution(0.0, 1.0);
+    return distribution(generator);
 }
 
 inline double random_double(double min, double max) {

@@ -1,6 +1,10 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <atomic>
+#include <omp.h>
+#include <sstream>
+#include <vector>
 #include "hittable.h"
 #include "material.h"
 
@@ -24,16 +28,35 @@ class camera {
 
         std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 
+        // Create a vector to store pixel rows for thread-safe output
+        std::vector<std::string> rows(image_height);
+        std::atomic<int> completed_scanlines(0);
+
+        #pragma omp parallel for schedule(dynamic)
         for (int j = 0; j < image_height; j++) {
-            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+            std::ostringstream row_stream;
             for (int i = 0; i < image_width; i++) {
                 color pixel_color(0,0,0);
                 for (int sample = 0; sample < samples_per_pixel; sample++) {
                     ray r = get_ray(i, j);
                     pixel_color += ray_color(r, max_depth, world);
                 }
-                write_color(std::cout, pixel_samples_scale * pixel_color);
+                write_color(row_stream, pixel_samples_scale * pixel_color);
             }
+            rows[j] = row_stream.str();
+            
+            // Atomically increment completed scanlines and report progress
+            int completed = completed_scanlines.fetch_add(1, std::memory_order_release) + 1;
+            
+            #pragma omp critical
+            {
+                std::clog << "\rScanlines remaining: " << (image_height - completed) << ' ' << std::flush;
+            }
+        }
+
+        // Write all rows to output
+        for (const auto& row : rows) {
+            std::cout << row;
         }
 
         std::clog << "\rDone.                 \n";
